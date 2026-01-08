@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <site>
-   <description name="AssistAI - a AI code assistant plugin for Eclipse IDE" url="https://gradusnikov.github.io/eclipse-chatgpt-plugin/">
+   <description name="AssistAI - a AI code assistant plugin for Eclipse IDE" url="https://naturzukunft.github.io/eclipse-chatgpt-plugin/">
       AssistAI - a AI code assistant plugin for Eclipse IDE
    </description>
-   <feature url="features/com.github.gradusnikov.eclipse.assistai_1.0.6.202512161151.jar" id="com.github.gradusnikov.eclipse.assistai" version="1.0.6.202512161151"/>
+   <feature url="features/com.github.gradusnikov.eclipse.assistai_1.0.6.nz1.jar" id="com.github.gradusnikov.eclipse.assistai" version="1.0.6.nz1"/>
 </site>
