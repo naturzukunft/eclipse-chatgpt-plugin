@@ -1,0 +1,351 @@
+= AssistAI Eclipse Plugin - Architecture Documentation
+:toc: left
+:toclevels: 3
+:sectnums:
+
+== Introduction and Goals
+
+=== Requirements Overview
+
+AssistAI is an Eclipse IDE plugin that integrates Large Language Models (LLMs) directly into the development environment.
+
+.Key Features
+* Chat interface for natural language interaction with LLMs
+* Code generation, refactoring, and documentation
+* Multi-provider support (Anthropic Claude, OpenAI, Google Gemini, DeepSeek, Grok, local models)
+* Model Context Protocol (MCP) integration for tool execution
+* Streaming responses for real-time feedback
+
+=== Quality Goals
+
+[cols="1,2,3"]
+|===
+| Priority | Quality Goal | Description
+
+| 1 | Extensibility | Easy addition of new LLM providers through common interface
+| 2 | Responsiveness | Real-time streaming of LLM responses to the UI
+| 3 | Usability | Seamless integration into Eclipse IDE workflow
+| 4 | Reliability | Robust error handling and rate limit management
+|===
+
+=== Stakeholders
+
+[cols="1,2,2"]
+|===
+| Role | Description | Expectations
+
+| Eclipse Developer | Uses the plugin for daily coding tasks | Fast, reliable AI assistance
+| Plugin Developer | Extends or modifies the plugin | Clean architecture, well-defined interfaces
+| LLM Provider | Provides the AI backend | Standard API integration
+|===
+
+== Architecture Constraints
+
+=== Technical Constraints
+
+[cols="1,3"]
+|===
+| Constraint | Description
+
+| Eclipse Platform | Must run as Eclipse plugin (OSGi bundle)
+| Java 17+ | Requires Java 17 or higher
+| HTTP/1.1 + SSE | LLM APIs use Server-Sent Events for streaming
+|===
+
+== Context and Scope
+
+=== Business Context
+
+----
++------------------+
+|  Eclipse         |
+|  Developer       |
++--------+---------+
+         |
+         | Chat, Commands
+         v
++------------------+       HTTPS + SSE      +------------------+
+|                  | <-------------------->  |  LLM Providers   |
+|  AssistAI Plugin |                         |  - Anthropic     |
+|                  |                         |  - OpenAI        |
++--------+---------+                         |  - Gemini        |
+         |                                   +------------------+
+         | Read/Write
+         v
++------------------+
+|  Eclipse         |
+|  Workspace       |
++------------------+
+----
+
+=== Technical Interfaces
+
+[cols="1,1,2"]
+|===
+| Interface | Protocol | Description
+
+| Plugin to LLM API | HTTPS + SSE | JSON requests, Server-Sent Events streaming
+| Plugin to Workspace | Java/Eclipse API | Read/write files via Eclipse Resource API
+| UI to Controller | Java | Direct method calls within plugin
+|===
+
+== Solution Strategy
+
+=== Key Decisions
+
+[cols="1,3"]
+|===
+| Decision | Rationale
+
+| Strategy Pattern for LLM Clients | LanguageModelClient interface enables easy addition of new providers
+| Reactive Streams for Streaming | Java Flow API for non-blocking, real-time UI updates
+| MCP for Tool Execution | Standardized tool interface, separates LLM from tool implementation
+| Eclipse Jobs for Background Work | Non-blocking operations and progress reporting
+| Provider Selection by URL | API URL pattern determines which client to use
+|===
+
+=== Technology Stack
+
+* UI: SWT/JFace (Eclipse standard)
+* HTTP: Java HttpClient (built-in)
+* JSON: Jackson ObjectMapper
+* DI: Jakarta CDI / Eclipse E4 DI
+* MCP: io.modelcontextprotocol SDK
+
+== Building Block View
+
+=== Level 1: Plugin Overview
+
+----
++---------------------------------------------------+
+|               AssistAI Plugin                     |
+|                                                   |
+|  +-------------+          +-----------------+     |
+|  | View Layer  | -------> |   Jobs Layer    |     |
+|  +-------------+          +--------+--------+     |
+|                                    |              |
+|                      +-------------+-------------+|
+|                      |                           ||
+|                      v                           v|
+|            +-----------------+      +------------+|
+|            | Network Layer   |      | MCP Layer  ||
+|            +-----------------+      +------------+|
+|                      |                    |       |
+|                      v                    v       |
+|            +---------------------------------+    |
+|            |         Model Layer             |    |
+|            +---------------------------------+    |
++---------------------------------------------------+
+----
+
+.Building Blocks
+[cols="1,3"]
+|===
+| Block | Responsibility
+
+| View Layer | UI components (ChatView, ChatViewPresenter)
+| Network Layer | LLM API communication (Clients, Subscribers)
+| MCP Layer | Tool definitions and execution (MCP Servers)
+| Jobs Layer | Background task execution (Eclipse Jobs)
+| Model Layer | Data structures (Conversation, ChatMessage, ModelApiDescriptor)
+|===
+
+=== Level 2: Network Layer - Client Hierarchy
+
+----
+            <<interface>>
+         LanguageModelClient
+         - setModel(ModelApiDescriptor)
+         - subscribe(Subscriber<Incoming>)
+         - run(Conversation): Runnable
+                  ^
+                  |
+    AbstractLanguageModelClient
+                  ^
+                  |
+    +------+------+------+------+------+
+    |      |      |      |      |      |
+Anthropic OpenAI Gemini DeepSeek Grok  OpenAI
+Client   Client Client  Client Client Responses
+----
+
+=== Level 2: MCP Layer - Tool Servers
+
+----
++---------------------------+
+| InMemoryMcpClientRegistry |
++------------+--------------+
+             | manages
+             |
++------------+------------------------------------------+
+|            |                |              |          |
+v            v                v              v          v
+eclipse-ide  eclipse-coder   duck-duck-   webpage-   memory
+                             search       reader
+
+eclipse-ide tools:
+  - getSource()
+  - getJavaDoc()
+  - getCompilationErrors()
+  - readProjectResource()
+  - getCurrentlyOpenedFile()
+
+eclipse-coder tools:
+  - createFile()
+  - insertIntoFile()
+  - replaceString()
+  - deleteFile()
+  - formatCode()
+----
+
+=== Level 2: Subscriber Pattern
+
+----
+LanguageModelClient
+        |
+        | publishes Incoming(type, payload)
+        |
+        +---> AppendMessageToViewSubscriber  --> Updates UI
+        |
+        +---> FunctionCallSubscriber         --> Detects tool calls
+        |
+        +---> PrintMessageSubscriber         --> Logs to console
+----
+
+== Runtime View
+
+=== Scenario 1: User Sends Chat Message
+
+----
+User        ChatView    Presenter    Job         Client      API
+ |             |            |          |            |          |
+ |--message--->|            |          |            |          |
+ |             |--onSend--->|          |            |          |
+ |             |            |--schedule->          |          |
+ |             |            |          |--run------>|          |
+ |             |            |          |            |--POST--->|
+ |             |            |          |            |<--SSE----|
+ |             |<---------updateUI-----|<--onNext---|          |
+ |             |<---------updateUI-----|<--onNext---|          |
+ |             |            |          |<--complete-|          |
+ |<--display---|            |          |            |          |
+----
+
+=== Scenario 2: Tool Call (Agentic Loop)
+
+----
+Job1        Client      API         FuncSub     ExecJob     MCP        Job2
+ |            |          |             |           |          |          |
+ |--run------>|          |             |           |          |          |
+ |            |--POST--->|             |           |          |          |
+ |            |<-tool_use-|            |           |          |          |
+ |            |--------onNext--------->|           |          |          |
+ |            |-------complete-------->|           |          |          |
+ |            |          |             |--schedule->          |          |
+ |            |          |             |           |--call--->|          |
+ |            |          |             |           |<-result--|          |
+ |            |          |             |           |--onContinue-------->|
+ |            |          |             |           |          |   (loops)
+----
+
+Loop continues until LLM responds with only text (no tool_use).
+
+== Deployment View
+
+----
++-------------------------------------------------------+
+|              Developer Machine                        |
+|                                                       |
+|  +---------------------------+                        |
+|  |      Eclipse IDE          |                        |
+|  |                           |       Internet         |
+|  |  +---------------------+  |                        |
+|  |  | AssistAI Plugin     +--+-----> api.anthropic.com|
+|  |  | - main bundle       |  |-----> api.openai.com   |
+|  |  | - dependencies      |  |                        |
+|  |  +---------------------+  |                        |
+|  +---------------------------+                        |
+|                                                       |
+|  ~/.eclipse/preferences (API keys)                    |
++-------------------------------------------------------+
+----
+
+== Cross-cutting Concepts
+
+=== Streaming Architecture
+
+LLM communication uses Server-Sent Events (SSE):
+
+----
+Request:  POST /v1/messages  (JSON body)
+Response: SSE stream
+          data: {"type": "content_block_delta", "delta": {"text": "Hello"}}
+          data: {"type": "content_block_delta", "delta": {"text": " World"}}
+          data: [DONE]
+----
+
+=== Provider Abstraction
+
+New LLM providers can be added by:
+
+1. Implementing LanguageModelClient interface
+2. Adding URL pattern to AbstractLanguageModelHttpClientProvider
+3. Registering provider in DI container
+
+=== Tool Execution (MCP)
+
+Tools are defined using annotations:
+
+[source,java]
+----
+@McpServer(name = "eclipse-ide")
+public class EclipseIntegrationsMcpServer {
+    
+    @Tool(description = "Get Java source code")
+    public String getSource(@ToolParam(name = "className") String className) {
+        // Implementation
+    }
+}
+----
+
+=== Error Handling
+
+* Rate Limits (429): Automatic retry with exponential backoff
+* API Errors: Logged and displayed to user
+* Cancellation: Via Eclipse progress monitor
+
+== Architecture Decisions
+
+=== ADR-001: Java HttpClient for LLM calls
+
+Status: Accepted
+
+Context: Need HTTP client supporting SSE streaming
+
+Decision: Use built-in Java HttpClient (Java 11+)
+
+Consequences: No additional dependency, full control over streaming
+
+=== ADR-002: Separate API clients per provider
+
+Status: Accepted
+
+Context: Different LLM providers have different API formats
+
+Decision: Create separate client classes implementing common interface
+
+Consequences: Clear separation, easy to add providers, some code duplication
+
+== Glossary
+
+[cols="1,3"]
+|===
+| Term | Definition
+
+| LLM | Large Language Model - AI model for text generation
+| MCP | Model Context Protocol - Anthropic standard for tool integration
+| SSE | Server-Sent Events - HTTP streaming protocol
+| Tool Call | LLM requesting execution of a specific function
+| Agentic Loop | Pattern where LLM iteratively calls tools until complete
+| Provider | LLM service provider (Anthropic, OpenAI, etc.)
+|===
