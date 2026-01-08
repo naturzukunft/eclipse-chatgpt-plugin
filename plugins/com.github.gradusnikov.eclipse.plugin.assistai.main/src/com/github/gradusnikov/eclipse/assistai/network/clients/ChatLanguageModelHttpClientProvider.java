@@ -38,7 +38,8 @@ public class ChatLanguageModelHttpClientProvider extends AbstractLanguageModelHt
             Provider<AnthropicStreamJavaHttpClient> anthropicClientProvider,
             Provider<GrokStreamJavaHttpClient> grokClientProvider, 
             Provider<DeepSeekStreamJavaHttpClient> deepseekClientProvider,
-            Provider<GeminiStreamJavaHttpClient> geminiClientProvider
+            Provider<GeminiStreamJavaHttpClient> geminiClientProvider,
+            Provider<ClaudeCliStreamClient> claudeCliClientProvider
             )
     {
         super( openaiClientProvider, 
@@ -46,7 +47,8 @@ public class ChatLanguageModelHttpClientProvider extends AbstractLanguageModelHt
                 anthropicClientProvider, 
                 grokClientProvider, 
                 deepseekClientProvider, 
-                geminiClientProvider );
+                geminiClientProvider,
+                claudeCliClientProvider );
     }
     
     

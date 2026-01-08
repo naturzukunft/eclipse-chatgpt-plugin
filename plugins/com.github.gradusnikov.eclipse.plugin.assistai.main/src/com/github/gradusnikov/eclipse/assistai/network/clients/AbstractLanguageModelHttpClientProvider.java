@@ -15,6 +15,7 @@ public abstract class AbstractLanguageModelHttpClientProvider
     protected final Provider<GrokStreamJavaHttpClient> grokClientProvider;
     protected final Provider<DeepSeekStreamJavaHttpClient> deepseekClientProvider;
     protected final Provider<GeminiStreamJavaHttpClient> geminiClientProvider;
+    protected final Provider<ClaudeCliStreamClient> claudeCliClientProvider;
 
     public AbstractLanguageModelHttpClientProvider(
             Provider<OpenAIStreamJavaHttpClient> openaiClientProvider,
@@ -22,7 +23,8 @@ public abstract class AbstractLanguageModelHttpClientProvider
             Provider<AnthropicStreamJavaHttpClient> anthropicClientProvider,
             Provider<GrokStreamJavaHttpClient> grokClientProvider,
             Provider<DeepSeekStreamJavaHttpClient> deepseekClientProvider,
-            Provider<GeminiStreamJavaHttpClient> geminiClientProvider
+            Provider<GeminiStreamJavaHttpClient> geminiClientProvider,
+            Provider<ClaudeCliStreamClient> claudeCliClientProvider
             )
     {
         super();
@@ -32,13 +34,14 @@ public abstract class AbstractLanguageModelHttpClientProvider
         Objects.requireNonNull( grokClientProvider );
         Objects.requireNonNull( deepseekClientProvider );
         Objects.requireNonNull( geminiClientProvider );
+        Objects.requireNonNull( claudeCliClientProvider );
         this.openaiClientProvider = openaiClientProvider;
         this.openaiResponsesClientProvider = openaiResponsesClientProvider;
         this.anthropicClientProvider = anthropicClientProvider;
         this.grokClientProvider = grokClientProvider;
         this.deepseekClientProvider = deepseekClientProvider;
         this.geminiClientProvider = geminiClientProvider;
-        
+        this.claudeCliClientProvider = claudeCliClientProvider;
     }
 
     /**
@@ -49,6 +52,7 @@ public abstract class AbstractLanguageModelHttpClientProvider
         var apiUrl = modelApiDescriptor.apiUrl();
         
         var clientProvider = switch ( apiUrl.toLowerCase() ) {
+            case String s when s.contains("claude-cli") -> claudeCliClientProvider;
             case String s when s.contains("anthropic") -> anthropicClientProvider;
             case String s when s.contains("deepseek")  -> deepseekClientProvider;
             case String s when s.contains("googleapis") -> geminiClientProvider;

@@ -32,7 +32,8 @@ public class CompletionsLanguageModelHttpClientProvider extends AbstractLanguage
             Provider<AnthropicStreamJavaHttpClient> anthropicClientProvider,
             Provider<GrokStreamJavaHttpClient> grokClientProvider, 
             Provider<DeepSeekStreamJavaHttpClient> deepseekClientProvider,
-            Provider<GeminiStreamJavaHttpClient> geminiClientProvider
+            Provider<GeminiStreamJavaHttpClient> geminiClientProvider,
+            Provider<ClaudeCliStreamClient> claudeCliClientProvider
             )
     {
         super( openaiClientProvider, 
@@ -40,7 +41,8 @@ public class CompletionsLanguageModelHttpClientProvider extends AbstractLanguage
                 anthropicClientProvider, 
                 grokClientProvider, 
                 deepseekClientProvider, 
-                geminiClientProvider );
+                geminiClientProvider,
+                claudeCliClientProvider );
     }
     
     
